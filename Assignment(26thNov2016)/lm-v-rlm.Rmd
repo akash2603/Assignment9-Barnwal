@@ -1,0 +1,74 @@
+---
+title: "Nested- Unnested R"
+author: "Akash Barnwal"
+date: "November 27, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+```{r}
+
+# Running all the necessary packages required for the code
+library(dplyr)
+library(gapminder)
+library(purrr)
+library(MASS)
+library(tidyr)
+library(ggplot2)
+```
+
+```{r}
+
+# Getting the data from gapminder and converting gdpPercap to logarithmic function. Using nest to get the data into dataframes
+gap_nested <- gapminder %>% mutate(log_gdpPercap = log10(gdpPercap)) %>%
+  group_by(continent, country) %>% nest()
+
+
+# Writing a function to run the model with life expectency against log10 of per capita GDP per country.
+
+gap_lm <- function(df){
+  lm(log_gdpPercap ~ lifeExp ,data = df)
+}
+
+# Putting the model right back to the nested data frame.
+gap_nested <- gap_nested %>% mutate(lm_fit = map(data, gap_lm))
+
+# Taking the coefficient and running the data
+gap_nested <- gap_nested %>% mutate(lm_coef = map(lm_fit, coef))
+```
+
+```{r}
+
+# Writing a function to run the robust model with life expectency against log10 of per capita GDP per country.
+
+gap_rlm <- function(df){
+  rlm(log_gdpPercap ~ lifeExp ,data = df)
+}
+
+# Putting the model right back to the nested data frame.
+gap_nested <- gap_nested %>% mutate(rlm_fit = map(data, gap_rlm))
+
+
+# Taking the coefficient and running the data
+gap_nested <- gap_nested %>% mutate(rlm_coef = map(rlm_fit, coef))
+
+##unnesting the lm_coef and rlm_coef and plotting  lm_coef vs rlm_coef
+
+gap_unnested <- unnest(gap_nested, lm_coef, rlm_coef)
+
+gap_unnested %>% ggplot(aes(lm_coef, rlm_coef)) +geom_line(aes(group = country)) + geom_smooth(color = "red") + facet_wrap(~continent)
+
+## the diffence is more than 0.01.
+
+gap_unnested <- gap_unnested %>% mutate(dif = abs(lm_coef-rlm_coef))
+
+# scatter plot for the countries with the biggest differences in the two slope estimates
+gap_unnested %>% filter(dif >= 0.01) %>% ggplot(aes(lm_coef, rlm_coef)) +geom_point(aes(group = country))+ facet_wrap(~continent)
+
+```
+
+
